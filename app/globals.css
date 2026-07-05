@@ -1,7 +1,15 @@
 @import "tailwindcss";
 
+:root {
+  --accent: #4f46e5;
+  --accent-dark: #4338ca;
+}
+
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background-color: #f7f7fb;
+  background-image: radial-gradient(circle at top, rgba(79, 70, 229, 0.06), transparent 55%);
+  background-attachment: fixed;
 }
 
 table {
@@ -10,21 +18,55 @@ table {
   font-size: 0.875rem;
 }
 
+thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
 th {
   text-align: left;
-  padding: 0.5rem 0.75rem;
-  border-bottom: 2px solid #e5e5e5;
-  color: #525252;
+  padding: 0.6rem 0.85rem;
+  background: #fafafa;
+  border-bottom: 1px solid #ececf3;
+  color: #6b7280;
   font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   white-space: nowrap;
 }
 
 td {
-  padding: 0.45rem 0.75rem;
-  border-bottom: 1px solid #f0f0f0;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid #f2f2f6;
   white-space: nowrap;
 }
 
+tbody tr:last-child td {
+  border-bottom: none;
+}
+
+tbody tr {
+  transition: background-color 120ms ease;
+}
+
 tbody tr:hover {
-  background: #fafafa;
+  background: #f5f5fb;
+}
+
+/* Small pill used to flag the most recent / newest season across the site. */
+.badge-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.05rem 0.5rem;
+  border-radius: 9999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  color: white;
+  line-height: 1.4rem;
 }

@@ -28,41 +28,41 @@ export default async function Home() {
 
   const latest = seasons[0];
 
+  const cards = [
+    { href: "/standings", icon: "📊", label: "Standings", desc: "Season by season" },
+    { href: "/records/single-game", icon: "🏈", label: "Single Game Records", desc: "Best and worst games ever" },
+    { href: "/records/single-season", icon: "📈", label: "Single Season Records", desc: "Best and worst seasons" },
+    { href: "/records/career", icon: "🏆", label: "Career Records", desc: "All-time franchise leaders" },
+    { href: "/postseason", icon: "🥇", label: "Postseason", desc: "Champions by year" },
+    { href: "/teams", icon: "👥", label: "Teams", desc: "Every franchise in league history" },
+    { href: "/gamecenter", icon: "🎮", label: "Game Center", desc: "Weekly matchups and head-to-head history" },
+  ];
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">{latest.league_name ?? "League History"}</h1>
-        <p className="text-neutral-500 mt-1">
-          {seasons.length} season{seasons.length === 1 ? "" : "s"} imported, {seasons[seasons.length - 1].season}
-          {"–"}
-          {latest.season}
+        <h1 className="text-3xl font-bold tracking-tight">{latest.league_name ?? "League History"}</h1>
+        <p className="text-neutral-500 mt-2 flex flex-wrap items-center gap-2">
+          <span>
+            {seasons.length} season{seasons.length === 1 ? "" : "s"} imported, {seasons[seasons.length - 1].season}
+            {"–"}
+            {latest.season}
+          </span>
+          <span className="badge-new">New: {latest.season}</span>
         </p>
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <Link href="/standings" className="rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400">
-          <div className="font-semibold">Standings</div>
-          <div className="text-sm text-neutral-500">Season by season</div>
-        </Link>
-        <Link href="/records/single-game" className="rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400">
-          <div className="font-semibold">Single Game Records</div>
-          <div className="text-sm text-neutral-500">Best and worst games ever</div>
-        </Link>
-        <Link href="/records/single-season" className="rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400">
-          <div className="font-semibold">Single Season Records</div>
-          <div className="text-sm text-neutral-500">Best and worst seasons</div>
-        </Link>
-        <Link href="/records/career" className="rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400">
-          <div className="font-semibold">Career Records</div>
-          <div className="text-sm text-neutral-500">All-time franchise leaders</div>
-        </Link>
-        <Link href="/postseason" className="rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400">
-          <div className="font-semibold">Postseason</div>
-          <div className="text-sm text-neutral-500">Champions by year</div>
-        </Link>
-        <Link href="/teams" className="rounded-lg border border-neutral-200 bg-white p-4 hover:border-neutral-400">
-          <div className="font-semibold">Teams</div>
-          <div className="text-sm text-neutral-500">Every franchise in league history</div>
-        </Link>
+        {cards.map((c) => (
+          <Link
+            key={c.href}
+            href={c.href}
+            className="group rounded-xl border border-neutral-200/70 bg-white p-4 shadow-sm shadow-neutral-200/40 transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
+          >
+            <div className="text-xl mb-1.5">{c.icon}</div>
+            <div className="font-semibold group-hover:text-indigo-700 transition-colors">{c.label}</div>
+            <div className="text-sm text-neutral-500">{c.desc}</div>
+          </Link>
+        ))}
       </div>
     </div>
   );

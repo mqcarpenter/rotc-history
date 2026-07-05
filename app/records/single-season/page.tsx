@@ -37,13 +37,13 @@ export default async function SingleSeasonRecordsPage() {
       <h1 className="text-2xl font-bold">Single Season Records</h1>
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Most Points in a Season</h2>
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-neutral-200/70 bg-white shadow-sm shadow-neutral-200/40">
           <SeasonTable rows={mostPoints} />
         </div>
       </section>
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Fewest Points in a Season</h2>
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-neutral-200/70 bg-white shadow-sm shadow-neutral-200/40">
           <SeasonTable rows={fewestPoints} />
         </div>
       </section>

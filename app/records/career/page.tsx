@@ -7,7 +7,7 @@ export default async function CareerRecordsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">Career Records</h1>
-      <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-neutral-200/70 bg-white shadow-sm shadow-neutral-200/40">
         <table>
           <thead>
             <tr>

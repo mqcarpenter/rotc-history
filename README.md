@@ -143,8 +143,12 @@ can be switched back to a normal server-rendered Next.js app by removing
   `data/league.db` (any SQLite browser works, e.g. `DB Browser for SQLite`).
 - **League/division/toilet bowl champions**: not computed automatically
   (MFLHistory's admin panel has you enter these by hand too, for the same
-  reason). Populate the `champions` table manually — one row per season with
-  `league_champ_team_id`, `runner_up_team_id`, `toilet_champ_team_id`.
+  reason). Fill in `data/champions.json` — one entry per season with
+  `leagueChampion`, `runnerUp`, `toiletBowlChampion` (team names, matched
+  case-insensitively against the `teams` table). This file is committed to
+  git (unlike `data/league.db`, which is rebuilt from scratch on every
+  deploy) and gets loaded into the `champions` table automatically as part
+  of `npm run import`, so just edit it and redeploy.
 - **Team identity across name changes**: teams are matched by exact name
   (case-insensitive). If an owner renamed their team mid-history and you want
   the career record to follow them, merge the two `teams` rows manually (move

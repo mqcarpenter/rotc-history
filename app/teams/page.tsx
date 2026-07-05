@@ -15,7 +15,7 @@ export default async function TeamsPage() {
           <Link
             key={t.id}
             href={`/teams/${t.id}`}
-            className="rounded-lg border border-neutral-200 bg-white p-3 hover:border-neutral-400"
+            className="group rounded-xl border border-neutral-200/70 bg-white p-3 shadow-sm shadow-neutral-200/40 transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow-md"
           >
             <div className="font-medium">{t.base_name}</div>
             <div className="text-xs text-neutral-500">{t.seasons_played} seasons</div>

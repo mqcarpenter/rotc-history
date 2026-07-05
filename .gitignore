@@ -1,0 +1,13 @@
+node_modules
+.next
+out
+tsconfig.tsbuildinfo
+
+# The SQLite data file is rebuilt from MyFantasyLeague on every deploy
+# (see vercel.json) — don't commit it. data/champions.json IS committed,
+# since it's hand-entered source data with no other home.
+data/league.db
+
+.env
+.env*.local
+.DS_Store

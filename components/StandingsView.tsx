@@ -15,21 +15,27 @@ export function StandingsView({
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-2xl font-bold">Standings</h1>
         <div className="flex flex-wrap gap-1.5">
-          {seasons.map((s) => (
-            <Link
-              key={s.season}
-              href={s.season === seasons[0].season ? "/standings" : `/standings/${s.season}`}
-              className={`rounded px-2 py-1 text-sm ${
-                s.season === season ? "bg-neutral-900 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
-              }`}
-            >
-              {s.season}
-            </Link>
-          ))}
+          {seasons.map((s) => {
+            const isLatest = s.season === seasons[0].season;
+            return (
+              <Link
+                key={s.season}
+                href={isLatest ? "/standings" : `/standings/${s.season}`}
+                className={`inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-sm transition-colors ${
+                  s.season === season
+                    ? "bg-indigo-600 text-white font-medium"
+                    : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"
+                }`}
+              >
+                {s.season}
+                {isLatest && <span className="badge-new">New</span>}
+              </Link>
+            );
+          })}
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-neutral-200/70 bg-white shadow-sm shadow-neutral-200/40">
         <table>
           <thead>
             <tr>

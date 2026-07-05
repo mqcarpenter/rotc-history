@@ -41,7 +41,7 @@ export default async function TeamDetailPage({
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Seasons</h2>
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-neutral-200/70 bg-white shadow-sm shadow-neutral-200/40">
           <table>
             <thead>
               <tr>
@@ -67,7 +67,7 @@ export default async function TeamDetailPage({
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Game Log</h2>
-        <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white max-h-[32rem] overflow-y-auto">
+        <div className="overflow-x-auto rounded-xl border border-neutral-200/70 bg-white shadow-sm shadow-neutral-200/40 max-h-[32rem] overflow-y-auto">
           <table>
             <thead>
               <tr>

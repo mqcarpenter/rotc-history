@@ -10,10 +10,16 @@ export interface Season {
 
 export async function getSeasons(): Promise<Season[]> {
   const db = await getDb();
+  // Only list seasons that actually have at least one game — the import
+  // script creates a `seasons` row as soon as MFL has franchise/draft data
+  // for a year, which happens before the season kicks off (so a future,
+  // not-yet-played season would otherwise show up here as an empty entry).
   return db
     .prepare(
       `SELECT season, league_name, num_teams, last_regular_season_week, end_week
-       FROM seasons ORDER BY season DESC`
+       FROM seasons
+       WHERE EXISTS (SELECT 1 FROM games WHERE games.season = seasons.season)
+       ORDER BY season DESC`
     )
     .all() as Season[];
 }
@@ -315,4 +321,153 @@ export async function getChampions(): Promise<ChampionRow[]> {
        ORDER BY s.season DESC`
     )
     .all() as ChampionRow[];
+}
+
+// ---------------------------------------------------------------------------
+// Game Center — a week's games plus the head-to-head history between the two
+// teams in each one, entirely derived from the `games` table already
+// imported (no extra MFL data needed beyond what's fetched today).
+
+export interface GameCenterWeekKey {
+  season: number;
+  week: number;
+}
+
+/** Every (season, week) that has at least one game — drives static params
+ * for /gamecenter/[season]/[week]. */
+export async function getGameCenterWeeks(): Promise<GameCenterWeekKey[]> {
+  const db = await getDb();
+  return db
+    .prepare(`SELECT DISTINCT season, week FROM games ORDER BY season DESC, week DESC`)
+    .all() as GameCenterWeekKey[];
+}
+
+/** Seasons that have game data, each with how many weeks were played — used
+ * to build the season/week picker on the Game Center pages. */
+export async function getGameCenterSeasons(): Promise<{ season: number; weeks: number[] }[]> {
+  const weeks = await getGameCenterWeeks();
+  const bySeason = new Map<number, number[]>();
+  for (const { season, week } of weeks) {
+    if (!bySeason.has(season)) bySeason.set(season, []);
+    bySeason.get(season)!.push(week);
+  }
+  return Array.from(bySeason.entries())
+    .map(([season, ws]) => ({ season, weeks: ws.sort((a, b) => a - b) }))
+    .sort((a, b) => b.season - a.season);
+}
+
+export interface GameCenterGame {
+  id: number;
+  game_type: string;
+  team_a_id: number;
+  team_a_name: string;
+  score_a: number;
+  team_b_id: number;
+  team_b_name: string;
+  score_b: number;
+}
+
+export async function getWeekGames(season: number, week: number): Promise<GameCenterGame[]> {
+  const db = await getDb();
+  return db
+    .prepare(
+      `SELECT g.id AS id, g.game_type AS game_type,
+              g.home_team_id AS team_a_id, ht.base_name AS team_a_name, g.home_score AS score_a,
+              g.away_team_id AS team_b_id, at.base_name AS team_b_name, g.away_score AS score_b
+       FROM games g
+       JOIN teams ht ON ht.id = g.home_team_id
+       JOIN teams at ON at.id = g.away_team_id
+       WHERE g.season = ? AND g.week = ?
+       ORDER BY g.game_type, g.id`
+    )
+    .all(season, week) as GameCenterGame[];
+}
+
+export interface HeadToHeadMeeting {
+  season: number;
+  week: number;
+  game_type: string;
+  team_a_name: string;
+  score_a: number;
+  team_b_name: string;
+  score_b: number;
+}
+
+export interface HeadToHeadSeries {
+  wins_a: number;
+  wins_b: number;
+  ties: number;
+  points_a: number;
+  points_b: number;
+}
+
+export interface HeadToHead {
+  overall: HeadToHeadSeries;
+  regular: HeadToHeadSeries;
+  postseason: HeadToHeadSeries;
+  meetings: HeadToHeadMeeting[];
+}
+
+function emptySeries(): HeadToHeadSeries {
+  return { wins_a: 0, wins_b: 0, ties: 0, points_a: 0, points_b: 0 };
+}
+
+/** All-time head-to-head between two teams — overall, regular-season-only,
+ * and postseason-only series records, plus the full list of meetings, oldest
+ * first. `teamAId` is just a reference point for which side "a"/"b" means in
+ * the returned series objects — it doesn't need to be the home team. */
+export async function getHeadToHead(teamAId: number, teamBId: number): Promise<HeadToHead> {
+  const db = await getDb();
+  const rows = db
+    .prepare(
+      `SELECT g.season AS season, g.week AS week, g.game_type AS game_type,
+              g.home_team_id AS home_team_id, ht.base_name AS home_name, g.home_score AS home_score,
+              g.away_team_id AS away_team_id, at.base_name AS away_name, g.away_score AS away_score
+       FROM games g
+       JOIN teams ht ON ht.id = g.home_team_id
+       JOIN teams at ON at.id = g.away_team_id
+       WHERE (g.home_team_id = ? AND g.away_team_id = ?) OR (g.home_team_id = ? AND g.away_team_id = ?)
+       ORDER BY g.season, g.week`
+    )
+    .all(teamAId, teamBId, teamBId, teamAId) as {
+    season: number;
+    week: number;
+    game_type: string;
+    home_team_id: number;
+    home_name: string;
+    home_score: number;
+    away_team_id: number;
+    away_name: string;
+    away_score: number;
+  }[];
+
+  const overall = emptySeries();
+  const regular = emptySeries();
+  const postseason = emptySeries();
+  const meetings: HeadToHeadMeeting[] = [];
+
+  for (const r of rows) {
+    const aIsHome = r.home_team_id === teamAId;
+    const scoreA = aIsHome ? r.home_score : r.away_score;
+    const scoreB = aIsHome ? r.away_score : r.home_score;
+    const bucket = r.game_type === "regular" ? regular : postseason;
+    for (const series of [overall, bucket]) {
+      series.points_a += scoreA;
+      series.points_b += scoreB;
+      if (scoreA > scoreB) series.wins_a++;
+      else if (scoreB > scoreA) series.wins_b++;
+      else series.ties++;
+    }
+    meetings.push({
+      season: r.season,
+      week: r.week,
+      game_type: r.game_type,
+      team_a_name: aIsHome ? r.home_name : r.away_name,
+      score_a: scoreA,
+      team_b_name: aIsHome ? r.away_name : r.home_name,
+      score_b: scoreB,
+    });
+  }
+
+  return { overall, regular, postseason, meetings };
 }

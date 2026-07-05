@@ -104,7 +104,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   return (
     <section className="space-y-2">
       <h2 className="text-lg font-semibold">{title}</h2>
-      <div className="overflow-x-auto rounded-lg border border-neutral-200 bg-white">{children}</div>
+      <div className="overflow-x-auto rounded-xl border border-neutral-200/70 bg-white shadow-sm shadow-neutral-200/40">{children}</div>
     </section>
   );
 }

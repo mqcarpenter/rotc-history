@@ -6,11 +6,33 @@
 
 const UA = "mfl-history-app/1.0 (personal league history import script)";
 
-async function mflGet<T>(year: number, params: Record<string, string>): Promise<T> {
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** A build fetches hundreds of these in a row (23 seasons × up to ~17 weeks
+ * each) — transient network blips or momentary rate-limiting from MFL are
+ * expected, not exceptional, so retry a couple of times with backoff before
+ * giving up on any single request. */
+async function mflGet<T>(year: number, params: Record<string, string>, attempt = 1): Promise<T> {
   const qs = new URLSearchParams({ JSON: "1", ...params });
   const url = `https://api.myfantasyleague.com/${year}/export?${qs.toString()}`;
-  const res = await fetch(url, { headers: { "User-Agent": UA } });
+  const maxAttempts = 3;
+  let res: Response;
+  try {
+    res = await fetch(url, { headers: { "User-Agent": UA } });
+  } catch (err) {
+    if (attempt < maxAttempts) {
+      await sleep(attempt * 500);
+      return mflGet<T>(year, params, attempt + 1);
+    }
+    throw new Error(`MFL request failed after ${maxAttempts} attempts: ${url} (${(err as Error).message})`);
+  }
   if (!res.ok) {
+    if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
+      await sleep(attempt * 500);
+      return mflGet<T>(year, params, attempt + 1);
+    }
     throw new Error(`MFL request failed (${res.status}): ${url}`);
   }
   const text = await res.text();
