@@ -69,17 +69,25 @@ function getOrCreateTeam(db: Db, name: string): number {
   return Number(result.lastInsertRowid);
 }
 
-/** Returns the number of games imported for this season (0 if the league had
- * no franchise data yet, e.g. a not-yet-drafted future season) — callers use
- * this to decide whether the season is "real" enough to show in the app. */
-async function importSeason(db: Db, year: number, leagueId: string): Promise<number> {
+export interface SeasonImportResult {
+  gameCount: number;
+  failedWeeks: number[];
+  totalWeeks: number;
+}
+
+/** Returns import stats for this season (gameCount 0 if the league had no
+ * franchise data yet, e.g. a not-yet-drafted future season) — callers use
+ * this to decide whether the season is "real" enough to show in the app,
+ * and whether individual week failures left it incomplete even though it
+ * has *some* games. */
+async function importSeason(db: Db, year: number, leagueId: string): Promise<SeasonImportResult> {
   console.log(`\n=== ${year} (league ${leagueId}) ===`);
   const info = await fetchLeagueInfo(year, leagueId);
   const league = info.league;
   const franchises = asArray(league.franchises?.franchise);
   if (franchises.length === 0) {
     console.log(`  no franchise data returned, skipping`);
-    return 0;
+    return { gameCount: 0, failedWeeks: [], totalWeeks: 0 };
   }
 
   const divisions = asArray(league.divisions?.division);
@@ -150,9 +158,11 @@ async function importSeason(db: Db, year: number, leagueId: string): Promise<num
     }
   });
 
+  const failedWeeks: number[] = [];
   for (const { week, weekly, error } of weeklyResults) {
     if (error || !weekly) {
       console.log(`  week ${week}: fetch failed (${error})`);
+      failedWeeks.push(week);
       continue;
     }
     const matchups = asArray(weekly.weeklyResults?.matchup);
@@ -168,6 +178,11 @@ async function importSeason(db: Db, year: number, leagueId: string): Promise<num
       const homeScore = parseFloat(home.score);
       const awayScore = parseFloat(away.score);
       if (Number.isNaN(homeScore) || Number.isNaN(awayScore)) continue;
+      // A real fantasy matchup essentially never ends 0.00-0.00 for both
+      // sides — that pattern is a reliable signal of placeholder/demo data
+      // (e.g. an unresolved league ID that happened to point at some other,
+      // unrelated league) rather than a real played game. Skip it.
+      if (homeScore === 0 && awayScore === 0) continue;
       // Best-effort default: MFL flags regular-season weeks; anything past
       // that (or flagged non-regular) is bucketed as "playoff" for now.
       // Edit the `game_type` column directly in data/league.db (or add an
@@ -178,10 +193,13 @@ async function importSeason(db: Db, year: number, leagueId: string): Promise<num
     }
   }
   console.log(`  ${gameCount} games (weeks ${startWeek}-${endWeek})`);
+  if (failedWeeks.length) {
+    console.log(`  INCOMPLETE: ${failedWeeks.length}/${weeks.length} weeks failed to fetch: ${failedWeeks.join(", ")}`);
+  }
   // Not calling db.save() here: it re-serializes the *entire* in-memory
   // database to disk on every call, which is wasteful 23 times over. main()
   // saves once after every season has been processed.
-  return gameCount;
+  return { gameCount, failedWeeks, totalWeeks: weeks.length };
 }
 
 interface ChampionEntry {
@@ -253,23 +271,39 @@ async function main() {
 
   const imported: number[] = [];
   const empty: number[] = []; // franchise data existed but zero games (e.g. season hasn't started)
+  const incomplete: { year: number; failedWeeks: number[]; totalWeeks: number }[] = []; // some games, but some weeks failed to fetch
   const failed: { year: number; reason: string }[] = [];
 
+  const skipped: number[] = [];
+
   for (let year = start; year <= end; year++) {
-    // MFL's "history" block (fetched relative to `end`, usually the current
-    // year) doesn't always chain back through every league-ID change a long
-    // league has had — some seasons can come back missing even though the
-    // league genuinely played that year. Rather than skip immediately, fall
-    // back to the `--league` ID directly: recent/current seasons usually
-    // resolve under it even when history resolution misses them.
-    const leagueIdForYear = historyMap[year] ?? league;
-    if (!historyMap[year]) {
-      console.log(`\n=== ${year} ===\n  no league ID in history data — trying --league ${league} directly`);
+    // IMPORTANT: do NOT fall back to the `--league` ID directly when a year
+    // is missing from history data. A previous version of this script did
+    // that, reasoning that recent seasons usually share the current ID — but
+    // MFL league IDs get reassigned to unrelated leagues over time, and for
+    // at least one season (2003) that fallback silently pulled in a
+    // completely different, unrelated league's placeholder/demo data (10
+    // fake teams, every game scored 0-0). Wrong data is worse than missing
+    // data on a history site, so a year with no resolved ID is skipped and
+    // reported — find the real historical league ID (check your MFL admin
+    // account or old bookmarks/emails) and re-run with it if you want that
+    // season included.
+    const leagueIdForYear = historyMap[year];
+    if (!leagueIdForYear) {
+      console.log(`\n=== ${year} ===\n  no league ID in history data — skipping (find the real ID and re-import manually)`);
+      skipped.push(year);
+      continue;
     }
     try {
-      const gameCount = await importSeason(db, year, leagueIdForYear);
-      if (gameCount > 0) imported.push(year);
-      else empty.push(year);
+      const result = await importSeason(db, year, leagueIdForYear);
+      if (result.gameCount > 0) {
+        imported.push(year);
+        if (result.failedWeeks.length > 0) {
+          incomplete.push({ year, failedWeeks: result.failedWeeks, totalWeeks: result.totalWeeks });
+        }
+      } else {
+        empty.push(year);
+      }
     } catch (err) {
       failed.push({ year, reason: (err as Error).message });
       console.error(`  FAILED: ${(err as Error).message}`);
@@ -291,6 +325,11 @@ async function main() {
   console.log("\n=== Import summary ===");
   console.log(`  Imported with games: ${imported.length ? imported.join(", ") : "(none)"}`);
   if (empty.length) console.log(`  No games yet (season not started): ${empty.join(", ")}`);
+  if (skipped.length) {
+    console.log(
+      `  Skipped, no league ID resolved (${skipped.length}): ${skipped.join(", ")} — find the real historical league ID for these years and re-import manually if you want them included.`
+    );
+  }
   if (failed.length) {
     console.log(`  FAILED (${failed.length}):`);
     for (const f of failed) console.log(`    ${f.year}: ${f.reason}`);
