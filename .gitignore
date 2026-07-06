@@ -3,11 +3,12 @@ node_modules
 out
 tsconfig.tsbuildinfo
 
-# The SQLite data file is rebuilt from MyFantasyLeague on every deploy
-# (see vercel.json) — don't commit it. data/champions.json IS committed,
-# since it's hand-entered source data with no other home.
-data/league.db
-
 .env
 .env*.local
 .DS_Store
+
+# NOTE: data/league.db IS committed (not ignored) — Vercel builds from this
+# checked-in snapshot instead of re-fetching from MFL on every deploy (MFL's
+# API rate-limits hard, which made live-per-deploy imports unreliable). Run
+# `npm run import` locally and commit the updated file whenever you want
+# fresh data. See README.

@@ -136,13 +136,13 @@ async function importSeason(db: Db, year: number, leagueId: string): Promise<num
        home_score=excluded.home_score, away_score=excluded.away_score, game_type=excluded.game_type`
   );
 
-  // Fetch every week's results concurrently (bounded) instead of one at a
-  // time — a 23-season import doing ~15 sequential requests per season adds
-  // up to 300+ round trips and risks a Vercel build timeout, which silently
-  // truncates whichever seasons haven't been reached yet. The actual SQLite
-  // writes below still happen one at a time (sql.js is synchronous).
+  // One request at a time, in order. Earlier this ran 6 weeks concurrently
+  // to cut build time, but MFL's export API rate-limits hard — firing
+  // requests in parallel just produced a wall of 429s instead of finishing
+  // faster. The pacing/backoff in lib/mfl-client.ts now does the real work
+  // of staying under that limit; concurrency here is left at 1 deliberately.
   const weeks = Array.from({ length: endWeek - startWeek + 1 }, (_, i) => startWeek + i);
-  const weeklyResults = await pMap(weeks, 6, async (week) => {
+  const weeklyResults = await pMap(weeks, 1, async (week) => {
     try {
       return { week, weekly: await fetchWeeklyResults(year, leagueId, week), error: null as string | null };
     } catch (err) {

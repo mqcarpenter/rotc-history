@@ -10,27 +10,63 @@ function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** A build fetches hundreds of these in a row (23 seasons × up to ~17 weeks
- * each) — transient network blips or momentary rate-limiting from MFL are
- * expected, not exceptional, so retry a couple of times with backoff before
- * giving up on any single request. */
+// MFL's export API rate-limits aggressively — a full import (23 seasons ×
+// up to 17 weeks each, ~400 requests) reliably triggers 429s if requests go
+// out back-to-back or in parallel. Every request funnels through this queue,
+// which enforces a minimum gap between requests regardless of how many
+// callers are "concurrently" awaiting a fetch — that's what actually keeps
+// us under MFL's limit, more than any per-request retry logic does.
+const MIN_INTERVAL_MS = 800;
+let requestQueue: Promise<void> = Promise.resolve();
+let lastRequestAt = 0;
+
+function throttledFetch(url: string): Promise<Response> {
+  const scheduled = requestQueue.then(async () => {
+    const wait = lastRequestAt + MIN_INTERVAL_MS - Date.now();
+    if (wait > 0) await sleep(wait);
+    lastRequestAt = Date.now();
+    return fetch(url, { headers: { "User-Agent": UA } });
+  });
+  // Chain the queue off this request regardless of outcome, so one failure
+  // doesn't wedge every request behind it forever.
+  requestQueue = scheduled.then(
+    () => undefined,
+    () => undefined
+  );
+  return scheduled;
+}
+
+/** A 429 here means "you're being rate-limited," not "something broke" — so
+ * on 429 specifically we wait much longer (honoring a Retry-After header if
+ * MFL sends one) and retry more times than we would for a generic failure. */
 async function mflGet<T>(year: number, params: Record<string, string>, attempt = 1): Promise<T> {
   const qs = new URLSearchParams({ JSON: "1", ...params });
   const url = `https://api.myfantasyleague.com/${year}/export?${qs.toString()}`;
-  const maxAttempts = 3;
+  const maxAttempts = 6;
   let res: Response;
   try {
-    res = await fetch(url, { headers: { "User-Agent": UA } });
+    res = await throttledFetch(url);
   } catch (err) {
     if (attempt < maxAttempts) {
-      await sleep(attempt * 500);
+      await sleep(attempt * 1000);
       return mflGet<T>(year, params, attempt + 1);
     }
     throw new Error(`MFL request failed after ${maxAttempts} attempts: ${url} (${(err as Error).message})`);
   }
+  if (res.status === 429) {
+    if (attempt < maxAttempts) {
+      const retryAfterHeader = res.headers.get("retry-after");
+      const retryAfterMs = retryAfterHeader ? parseInt(retryAfterHeader, 10) * 1000 : null;
+      const backoffMs = retryAfterMs ?? Math.min(3000 * 2 ** (attempt - 1), 30000);
+      console.log(`    rate-limited (429), waiting ${Math.round(backoffMs / 1000)}s (attempt ${attempt}/${maxAttempts})`);
+      await sleep(backoffMs);
+      return mflGet<T>(year, params, attempt + 1);
+    }
+    throw new Error(`MFL request rate-limited (429) after ${maxAttempts} attempts: ${url}`);
+  }
   if (!res.ok) {
-    if ((res.status === 429 || res.status >= 500) && attempt < maxAttempts) {
-      await sleep(attempt * 500);
+    if (res.status >= 500 && attempt < maxAttempts) {
+      await sleep(attempt * 1000);
       return mflGet<T>(year, params, attempt + 1);
     }
     throw new Error(`MFL request failed (${res.status}): ${url}`);

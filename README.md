@@ -34,17 +34,29 @@ Open http://localhost:3000 to preview.
   "history" data — you don't need to hunt down each year's ID by hand.
 - Re-running `npm run import` is safe — it upserts, so you can re-import a
   single season (`--start 2025 --end 2025`) any time to pick up new games.
+- MFL's export API rate-limits fairly aggressively. The import script sends
+  one request at a time with pacing and backoff built in (see
+  `lib/mfl-client.ts`), so a full 23-season import takes several minutes —
+  that's expected, not stuck. It prints an **Import summary** at the end
+  listing which seasons imported cleanly, which had no games yet, and which
+  failed and why. Re-running the command is safe and often clears up any
+  seasons that failed due to rate-limiting.
 
-Imported data lives in `data/league.db` (SQLite file, gitignored). Delete it
-and re-run the import to start fresh.
+**Imported data lives in `data/league.db` (SQLite file) and is committed to
+git** — commit it after importing, alongside any code changes. This is
+deliberate: an earlier version re-fetched from MFL on every Vercel deploy,
+but MFL's rate limits made that unreliable (some seasons would silently come
+back incomplete). Now Vercel just builds from whatever `data/league.db` you
+committed, and refreshing data is a distinct, visible step: import locally,
+check the summary, commit, push.
 
 ## Deploying to Vercel (recommended)
 
-There's a `vercel.json` in this repo that sets the build command to
-`npm run import && npm run build` — meaning **every deploy re-fetches fresh
-data from MyFantasyLeague automatically**, no manual import/rebuild/reupload
-step ever. Vercel's build servers have normal internet access, so the import
-script runs there just like it does on your laptop.
+`vercel.json` sets the build command to plain `npm run build` — Vercel
+builds the static site from whatever `data/league.db` is committed in the
+repo, it does not fetch from MFL itself. To publish new data: run
+`npm run import` locally, confirm the summary looks right, commit
+`data/league.db`, and push — that push triggers the deploy.
 
 Two ways to connect this project to Vercel:
 
@@ -52,20 +64,15 @@ Two ways to connect this project to Vercel:
    GitLab/Bitbucket) repo, then in the Vercel dashboard choose **Add New →
    Project** and import that repo. Vercel auto-detects Next.js and picks up
    `vercel.json`'s build command automatically. Every future `git push`
-   triggers a new deploy — and a fresh data import — with no other action
-   needed.
+   (including one that just updates `data/league.db`) triggers a new deploy.
 2. **CLI-based (no Git required):** install the Vercel CLI (`npm i -g
    vercel`), run `vercel login`, then from inside this project run `vercel`
-   (preview) or `vercel --prod` (production). Re-run `vercel --prod` any
-   time you want to redeploy with fresh data.
+   (preview) or `vercel --prod` (production) any time you want to publish
+   whatever's in your local `data/league.db`.
 
 Since the site builds as a static export (`output: "export"` in
 `next.config.ts`), Vercel serves it from its CDN with no serverless function
 involved on the read path — fast, and nothing to misconfigure.
-
-Want it to refresh on a schedule too (say, every night during the season)
-instead of only when you trigger a deploy? Vercel supports Cron Jobs that
-can hit a redeploy hook — ask and I'll wire that up.
 
 ## Alternative: deploying to a plain (no Node.js) shared host
 
@@ -145,10 +152,9 @@ can be switched back to a normal server-rendered Next.js app by removing
   (MFLHistory's admin panel has you enter these by hand too, for the same
   reason). Fill in `data/champions.json` — one entry per season with
   `leagueChampion`, `runnerUp`, `toiletBowlChampion` (team names, matched
-  case-insensitively against the `teams` table). This file is committed to
-  git (unlike `data/league.db`, which is rebuilt from scratch on every
-  deploy) and gets loaded into the `champions` table automatically as part
-  of `npm run import`, so just edit it and redeploy.
+  case-insensitively against the `teams` table). It's loaded into the
+  `champions` table automatically as part of `npm run import` — edit it,
+  re-run the import, commit `data/league.db`, and push.
 - **Team identity across name changes**: teams are matched by exact name
   (case-insensitive). If an owner renamed their team mid-history and you want
   the career record to follow them, merge the two `teams` rows manually (move
